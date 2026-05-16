@@ -1,59 +1,36 @@
-import initSqlJs from 'sql.js';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const DB_PATH = join(__dirname, 'tasks.db');
 
-let db;
+let data;
+
+function defaultData() {
+  return { users: [], tasks: [] };
+}
 
 export async function initDb() {
-  const SQL = await initSqlJs();
-
-  if (existsSync(DB_PATH)) {
-    const buffer = readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
+  const dbPath = join(__dirname, 'store.json');
+  if (existsSync(dbPath)) {
+    try {
+      data = JSON.parse(readFileSync(dbPath, 'utf-8'));
+    } catch { data = defaultData(); }
   } else {
-    db = new SQL.Database();
+    data = defaultData();
   }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed')),
-      priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
-      due_date DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `);
-
-  saveDb();
-  return db;
+  return data;
 }
 
 export function saveDb() {
-  if (db) {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    writeFileSync(DB_PATH, buffer);
-  }
+  try {
+    const dbPath = join(__dirname, 'store.json');
+    writeFileSync(dbPath, JSON.stringify(data, null, 2));
+  } catch {}
 }
 
 export function getDb() {
-  return db;
+  if (!data) data = defaultData();
+  return data;
 }
