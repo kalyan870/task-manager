@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import TaskCard from '../components/TaskCard';
@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [filter, setFilter] = useState({ status: '', priority: '', sort: 'created_at' });
+  const pollingRef = useRef(null);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -39,18 +40,15 @@ export default function Dashboard() {
   }, [fetchTasks]);
 
   useEffect(() => {
-    const socket = io();
-    socket.on('task:created', (task) => {
-      setTasks(prev => [task, ...prev]);
-      toast.success(`New task: ${task.title}`);
-    });
-    socket.on('task:updated', (task) => {
-      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-    });
-    socket.on('task:deleted', ({ id }) => {
-      setTasks(prev => prev.filter(t => t.id !== id));
-    });
-    return () => socket.disconnect();
+    const pollInterval = setInterval(fetchTasks, 15000);
+    try {
+      const socket = io({ reconnectionAttempts: 2, timeout: 5000 });
+      socket.on('task:created', (task) => { clearInterval(pollInterval); setTasks(prev => [task, ...prev]); toast.success(`New task: ${task.title}`); });
+      socket.on('task:updated', (task) => { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); });
+      socket.on('task:deleted', ({ id }) => { setTasks(prev => prev.filter(t => t.id !== id)); });
+      socket.on('connect_error', () => {});
+    } catch {}
+    return () => clearInterval(pollInterval);
   }, []);
 
   const handleDelete = async (id) => {

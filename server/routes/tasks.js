@@ -63,7 +63,7 @@ router.post('/', (req, res) => {
   const id = result[0].values[0][0];
   const task = queryOne('SELECT * FROM tasks WHERE id = ?', [id]);
 
-  req.app.get('io').emit('task:created', task);
+  const io = req.app.get('io'); if (io?.emit) io.emit('task:created', task);
   res.status(201).json({ task });
 });
 
@@ -84,7 +84,7 @@ router.put('/:id', (req, res) => {
   saveDb();
 
   const task = queryOne('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
-  req.app.get('io').emit('task:updated', task);
+  const io2 = req.app.get('io'); if (io2?.emit) io2.emit('task:updated', task);
   res.json({ task });
 });
 
@@ -96,7 +96,7 @@ router.delete('/:id', (req, res) => {
   db.run('DELETE FROM tasks WHERE id = ?', [req.params.id]);
   saveDb();
 
-  req.app.get('io').emit('task:deleted', { id: parseInt(req.params.id) });
+  const io3 = req.app.get('io'); if (io3?.emit) io3.emit('task:deleted', { id: parseInt(req.params.id) });
   res.json({ message: 'Task deleted' });
 });
 
