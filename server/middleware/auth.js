@@ -1,22 +1,12 @@
-import jwt from 'jsonwebtoken';
+import { getAuth } from '@clerk/express';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'task-manager-secret-key-2024';
-
-export function generateToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+export function createRequireUser(resolveAuth = getAuth) {
+  return function requireUser(req, res, next) {
+    const { isAuthenticated, userId } = resolveAuth(req);
+    if (!isAuthenticated || !userId) return res.status(401).json({ error: 'Authentication required' });
+    req.userId = userId;
+    return next();
+  };
 }
 
-export function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ error: 'Access token required' });
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    res.status(403).json({ error: 'Invalid or expired token' });
-  }
-}
+export const requireUser = createRequireUser();
