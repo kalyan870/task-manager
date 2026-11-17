@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'TaskFlow user';
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -17,7 +18,7 @@ export default function Layout() {
               <span className="font-bold text-xl text-gray-900">TaskFlow</span>
             </div>
             <div className="hidden sm:flex items-center gap-4">
-              <span className="text-sm text-gray-600">{user?.name}</span>
+              <span className="text-sm text-gray-600">{displayName}</span>
               <button onClick={logout} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-600 transition-colors">
                 <LogOut className="w-4 h-4" /> Logout
               </button>
@@ -28,7 +29,7 @@ export default function Layout() {
           </div>
           {menuOpen && (
             <div className="sm:hidden pb-3 border-t border-gray-100 pt-3">
-              <span className="block text-sm text-gray-600 mb-2">{user?.name}</span>
+              <span className="block text-sm text-gray-600 mb-2">{displayName}</span>
               <button onClick={logout} className="flex items-center gap-1 text-sm text-red-600">
                 <LogOut className="w-4 h-4" /> Logout
               </button>

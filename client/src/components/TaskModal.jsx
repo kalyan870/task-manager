@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function TaskModal({ task, onClose, onSaved, token }) {
+export default function TaskModal({ task, onClose, onSaved, getToken }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('pending');
@@ -31,6 +31,7 @@ export default function TaskModal({ task, onClose, onSaved, token }) {
     const method = task ? 'PUT' : 'POST';
 
     try {
+      const token = await getToken();
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

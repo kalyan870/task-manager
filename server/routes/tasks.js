@@ -1,79 +1,68 @@
 import { Router } from 'express';
-import { getDb, saveDb } from '../db.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { taskRepository } from '../db.js';
+import { requireUser } from '../middleware/auth.js';
 
 const router = Router();
+router.use(requireUser);
 
-router.use(authenticateToken);
+const statuses = new Set(['pending', 'in_progress', 'completed']);
+const priorities = new Set(['low', 'medium', 'high']);
+const validId = (value) => /^\d+$/.test(value) && Number(value) > 0;
+const fail = (res) => res.status(503).json({ error: 'Task storage is temporarily unavailable' });
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { status, priority, sort } = req.query;
-  let tasks = getDb().tasks.filter(t => t.user_id === req.user.id);
-
-  if (status) tasks = tasks.filter(t => t.status === status);
-  if (priority) tasks = tasks.filter(t => t.priority === priority);
-
-  if (sort === 'due_date') tasks.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
-  else if (sort === 'priority') { const p = { high: 1, medium: 2, low: 3 }; tasks.sort((a, b) => (p[a.priority] || 0) - (p[b.priority] || 0)); }
-  else tasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-  res.json({ tasks });
+  if (status && !statuses.has(status)) return res.status(400).json({ error: 'Invalid status' });
+  if (priority && !priorities.has(priority)) return res.status(400).json({ error: 'Invalid priority' });
+  try {
+    const tasks = await taskRepository.list(req.userId, { status, priority, sort });
+    res.json({ tasks });
+  } catch { fail(res); }
 });
 
-router.get('/:id', (req, res) => {
-  const task = getDb().tasks.find(t => t.id === parseInt(req.params.id) && t.user_id === req.user.id);
-  if (!task) return res.status(404).json({ error: 'Task not found' });
-  res.json({ task });
+router.get('/:id', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ error: 'Invalid task id' });
+  try {
+    const task = await taskRepository.get(req.userId, req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    res.json({ task });
+  } catch { fail(res); }
 });
 
-router.post('/', (req, res) => {
-  const { title, description, status, priority, due_date } = req.body;
-  if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
-
-  const now = new Date().toISOString();
-  const task = {
-    id: Date.now(), user_id: req.user.id, title: title.trim(),
-    description: description || '', status: status || 'pending',
-    priority: priority || 'medium', due_date: due_date || null,
-    created_at: now, updated_at: now
-  };
-  getDb().tasks.unshift(task);
-  saveDb();
-
-  const io = req.app.get('io');
-  if (io?.emit) io.emit('task:created', task);
-  res.status(201).json({ task });
+router.post('/', async (req, res) => {
+  const { title, description = '', status = 'pending', priority = 'medium', due_date = null } = req.body ?? {};
+  if (typeof title !== 'string' || !title.trim() || title.length > 200) return res.status(400).json({ error: 'Title must contain 1 to 200 characters' });
+  if (typeof description !== 'string' || description.length > 5000) return res.status(400).json({ error: 'Description is too long' });
+  if (!statuses.has(status) || !priorities.has(priority)) return res.status(400).json({ error: 'Invalid task status or priority' });
+  if (due_date !== null && (typeof due_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due_date))) return res.status(400).json({ error: 'Invalid due date' });
+  try {
+    const task = await taskRepository.create(req.userId, { title: title.trim(), description, status, priority, due_date });
+    res.status(201).json({ task });
+  } catch { fail(res); }
 });
 
-router.put('/:id', (req, res) => {
-  const task = getDb().tasks.find(t => t.id === parseInt(req.params.id) && t.user_id === req.user.id);
-  if (!task) return res.status(404).json({ error: 'Task not found' });
-
-  const { title, description, status, priority, due_date } = req.body;
-  if (title !== undefined) task.title = title.trim();
-  if (description !== undefined) task.description = description;
-  if (status !== undefined) task.status = status;
-  if (priority !== undefined) task.priority = priority;
-  if (due_date !== undefined) task.due_date = due_date;
-  task.updated_at = new Date().toISOString();
-  saveDb();
-
-  const io = req.app.get('io');
-  if (io?.emit) io.emit('task:updated', task);
-  res.json({ task });
+router.put('/:id', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ error: 'Invalid task id' });
+  try {
+    const current = await taskRepository.get(req.userId, req.params.id);
+    if (!current) return res.status(404).json({ error: 'Task not found' });
+    const { title = current.title, description = current.description, status = current.status, priority = current.priority, due_date = current.due_date } = req.body ?? {};
+    if (typeof title !== 'string' || !title.trim() || title.length > 200) return res.status(400).json({ error: 'Title must contain 1 to 200 characters' });
+    if (typeof description !== 'string' || description.length > 5000) return res.status(400).json({ error: 'Description is too long' });
+    if (!statuses.has(status) || !priorities.has(priority)) return res.status(400).json({ error: 'Invalid task status or priority' });
+    if (due_date !== null && typeof due_date !== 'string') return res.status(400).json({ error: 'Invalid due date' });
+    const task = await taskRepository.update(req.userId, req.params.id, { title: title.trim(), description, status, priority, due_date });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    res.json({ task });
+  } catch { fail(res); }
 });
 
-router.delete('/:id', (req, res) => {
-  const db = getDb();
-  const idx = db.tasks.findIndex(t => t.id === parseInt(req.params.id) && t.user_id === req.user.id);
-  if (idx === -1) return res.status(404).json({ error: 'Task not found' });
-
-  db.tasks.splice(idx, 1);
-  saveDb();
-
-  const io = req.app.get('io');
-  if (io?.emit) io.emit('task:deleted', { id: parseInt(req.params.id) });
-  res.json({ message: 'Task deleted' });
+router.delete('/:id', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ error: 'Invalid task id' });
+  try {
+    if (!(await taskRepository.remove(req.userId, req.params.id))) return res.status(404).json({ error: 'Task not found' });
+    res.json({ message: 'Task deleted' });
+  } catch { fail(res); }
 });
 
 export default router;

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import TaskCard from '../components/TaskCard';
 import TaskModal from '../components/TaskModal';
@@ -9,7 +8,7 @@ import { Plus, Filter, Loader2 } from 'lucide-react';
 const API = '/api';
 
 export default function Dashboard() {
-  const { token } = useAuth();
+  const { getToken } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -23,9 +22,9 @@ export default function Dashboard() {
       if (filter.status) params.set('status', filter.status);
       if (filter.priority) params.set('priority', filter.priority);
       if (filter.sort) params.set('sort', filter.sort);
-      const res = await fetch(`${API}/tasks?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const token = await getToken();
+      const res = await fetch(`${API}/tasks?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Failed to fetch tasks');
       const data = await res.json();
       setTasks(data.tasks);
     } catch {
@@ -33,29 +32,21 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [token, filter]);
+  }, [getToken, filter]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
   useEffect(() => {
-    const pollInterval = setInterval(fetchTasks, 15000);
-    try {
-      const socket = io({ reconnectionAttempts: 2, timeout: 5000 });
-      socket.on('task:created', (task) => { clearInterval(pollInterval); setTasks(prev => [task, ...prev]); toast.success(`New task: ${task.title}`); });
-      socket.on('task:updated', (task) => { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); });
-      socket.on('task:deleted', ({ id }) => { setTasks(prev => prev.filter(t => t.id !== id)); });
-      socket.on('connect_error', () => {});
-    } catch {}
+    const pollInterval = setInterval(() => { void fetchTasks(); }, 15000);
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [fetchTasks]);
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`${API}/tasks/${id}`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
-      });
+      const token = await getToken();
+      const res = await fetch(`${API}/tasks/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error();
       toast.success('Task deleted');
     } catch {
@@ -70,6 +61,7 @@ export default function Dashboard() {
 
   const handleStatusChange = async (id, status) => {
     try {
+      const token = await getToken();
       const res = await fetch(`${API}/tasks/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status })
@@ -139,7 +131,7 @@ export default function Dashboard() {
           task={editTask}
           onClose={() => { setShowModal(false); setEditTask(null); }}
           onSaved={() => { setShowModal(false); setEditTask(null); fetchTasks(); }}
-          token={token}
+          getToken={getToken}
         />
       )}
     </div>
