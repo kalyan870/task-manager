@@ -3,16 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "cd ../client && npm install && npm run build",
+    "build": "npm --prefix ../client run build",
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "node --test"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "sql.js": "^1.9.0",
-    "socket.io": "^4.7.4"
+    "socket.io": "^4.7.4",
+    "@clerk/backend": "^3.30.0",
+    "@neondatabase/serverless": "^1.2.1"
   }
 }

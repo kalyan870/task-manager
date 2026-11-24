@@ -1,50 +1,43 @@
 # Task Manager
 
-<p align="center"><strong>A task-tracking web app prototype with user registration, a React dashboard, and real-time task events over Socket.IO.</strong></p>
-
-<p align="center">React · Vite · Express · Socket.IO · JSON file storage</p>
-
-## Project overview
-
-The client organizes tasks in a dashboard and uses authentication context for sign-in state. The Express server exposes authentication and task routes and creates a Socket.IO server for connected clients. The `api/` entry adapts HTTP routes for serverless hosting.
+TaskFlow is a React task dashboard with Clerk sign-in, an Express API, owner-scoped Neon PostgreSQL persistence, and private Socket.IO updates.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  U[User] --> C[React + Vite client]
-  C -->|HTTP| A[Express API]
-  C <-->|Socket.IO| A
-  A --> R[Auth and task routes]
-  R --> D[server/db.js JSON store]
-  D --> R --> A --> C
+  U[User] --> C[React + Clerk]
+  C -->|short-lived session token| A[Express API]
+  C <-->|verified token and owner room| S[Socket.IO]
+  A --> V[Clerk token verification]
+  A -->|parameterized, owner-scoped SQL| N[(Neon Postgres)]
+  N --> A --> C
 ```
 
-## Run locally
+The browser receives only the Clerk publishable key. The server verifies every API and socket session, derives the task owner from the Clerk subject, and scopes database reads, writes, and events to that owner. No uploaded files are stored by this application, so it does not require object storage.
 
-Use Node.js and open two terminals from the repository root:
+## Local setup
+
+1. Copy `.env.example` to the appropriate local environment files; never commit real values.
+2. Set `VITE_CLERK_PUBLISHABLE_KEY` for the client. Set `CLERK_SECRET_KEY` (or Clerk's `CLERK_JWT_KEY`), `CLERK_AUTHORIZED_PARTIES`, and `DATABASE_URL` only in the server environment.
+3. From `server/`, run `npm install`, `npm test`, then `npm run dev`.
+4. From `client/`, run `npm install`, `npm run dev`.
+
+`server/db.js` creates the required schema at startup. The equivalent reviewed SQL is in `db/migrations/001_tasks.sql` for managed migration workflows. The old JSON user/task store is no longer read; existing local records are not migrated automatically. Export and map them only after verifying their ownership and obtaining Clerk identities.
+
+## Checks
 
 ```bash
-cd server
-npm install
-npm run dev
+cd server && npm test
+cd ../client && npm run build
 ```
 
-```bash
-cd client
-npm install
-npm run dev
-```
+These checks cover fail-closed session validation, owner-scoped parameterized SQL, and the client production build. A successful local build does not provision Clerk or Neon; configure the deployment environment before enabling sign-in and durable storage.
 
-The server defaults to port `5000`. Open the Vite URL printed by the client and make sure its API/socket configuration points to the local server.
+## Security notes
 
-## Storage and deployment limits
-
-Task and user records are written to `server/store.json`. This local file-based store can be lost or become unreliable on serverless hosts and is not designed for concurrent production traffic. The server also allows broad CORS origins in its current configuration. Use a persistent database, scoped CORS, and production-grade authentication before using real accounts or deploying for a team.
-
-## Project structure
-
-- `client/` — React pages, task components, and auth context
-- `server/` — Express, Socket.IO, routes, middleware, and JSON store
-- `api/index.js` — serverless HTTP adapter
-- `vercel.json` — deployment routing
+- Never put `CLERK_SECRET_KEY`, `CLERK_JWT_KEY`, or `DATABASE_URL` in browser configuration or source control.
+- Set exact production origins in `CLERK_AUTHORIZED_PARTIES` / `CLIENT_ORIGINS`; wildcard CORS is disabled.
+- Task events are sent to the authenticated user's socket room, not broadcast account-wide.
+- Task titles, descriptions, state, and dates are validated by the API; SQL values are parameterized.
+- Do not reuse the prior local JSON password store. Those credentials are not accepted after this migration.

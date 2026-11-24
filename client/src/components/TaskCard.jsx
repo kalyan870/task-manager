@@ -24,10 +24,10 @@ export default function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
           {task.title}
         </h3>
         <div className="flex items-center gap-1">
-          <button onClick={() => onEdit(task)} className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={() => onEdit(task)} aria-label={`Edit ${task.title}`} className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors">
             <Edit3 className="w-4 h-4" />
           </button>
-          <button onClick={() => onDelete(task.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-100 transition-colors">
+          <button onClick={() => onDelete(task.id)} aria-label={`Delete ${task.title}`} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-100 transition-colors">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>

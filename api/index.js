@@ -3,24 +3,24 @@ import cors from 'cors';
 import authRoutes from '../server/routes/auth.js';
 import taskRoutes from '../server/routes/tasks.js';
 import { initDb } from '../server/db.js';
+import { authorizedParties } from '../server/middleware/auth.js';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: authorizedParties(), methods: ['GET', 'POST', 'PUT', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+app.use(express.json({ limit: '32kb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
-let ready = false;
-
+let ready;
 export default async function handler(req, res) {
   try {
-    if (!ready) {
-      await initDb();
-      ready = true;
-    }
+    ready ||= initDb();
+    await ready;
     return app(req, res);
-  } catch (err) {
-    console.error('Handler error:', err);
-    return res.status(500).json({ error: err.message || 'Internal server error' });
+  } catch (error) {
+    ready = undefined;
+    console.error('API initialization failed:', error.message);
+    return res.status(error.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+      .json({ error: error.code === 'DATABASE_NOT_CONFIGURED' ? error.message : 'API unavailable' });
   }
 }

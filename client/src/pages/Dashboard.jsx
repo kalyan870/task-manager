@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import TaskCard from '../components/TaskCard';
@@ -9,23 +9,23 @@ import { Plus, Filter, Loader2 } from 'lucide-react';
 const API = '/api';
 
 export default function Dashboard() {
-  const { token } = useAuth();
+  const { getToken } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [filter, setFilter] = useState({ status: '', priority: '', sort: 'created_at' });
-  const pollingRef = useRef(null);
-
   const fetchTasks = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (filter.status) params.set('status', filter.status);
       if (filter.priority) params.set('priority', filter.priority);
       if (filter.sort) params.set('sort', filter.sort);
+      const token = await getToken();
       const res = await fetch(`${API}/tasks?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Task request failed');
       const data = await res.json();
       setTasks(data.tasks);
     } catch {
@@ -33,26 +33,30 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [token, filter]);
+  }, [getToken, filter]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
   useEffect(() => {
+    let active = true;
+    let socket;
     const pollInterval = setInterval(fetchTasks, 15000);
-    try {
-      const socket = io({ reconnectionAttempts: 2, timeout: 5000 });
-      socket.on('task:created', (task) => { clearInterval(pollInterval); setTasks(prev => [task, ...prev]); toast.success(`New task: ${task.title}`); });
+    getToken().then((token) => {
+      if (!active || !token) return;
+      socket = io({ auth: { token }, reconnectionAttempts: 2, timeout: 5000 });
+      socket.on('task:created', (task) => { setTasks(prev => [task, ...prev]); toast.success(`New task: ${task.title}`); });
       socket.on('task:updated', (task) => { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); });
-      socket.on('task:deleted', ({ id }) => { setTasks(prev => prev.filter(t => t.id !== id)); });
+      socket.on('task:deleted', ({ id }) => { setTasks(prev => prev.filter(t => String(t.id) !== String(id))); });
       socket.on('connect_error', () => {});
-    } catch {}
-    return () => clearInterval(pollInterval);
-  }, []);
+    }).catch(() => {});
+    return () => { active = false; clearInterval(pollInterval); socket?.disconnect(); };
+  }, [getToken]);
 
   const handleDelete = async (id) => {
     try {
+      const token = await getToken();
       const res = await fetch(`${API}/tasks/${id}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
       });
@@ -70,6 +74,7 @@ export default function Dashboard() {
 
   const handleStatusChange = async (id, status) => {
     try {
+      const token = await getToken();
       const res = await fetch(`${API}/tasks/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status })
@@ -139,7 +144,7 @@ export default function Dashboard() {
           task={editTask}
           onClose={() => { setShowModal(false); setEditTask(null); }}
           onSaved={() => { setShowModal(false); setEditTask(null); fetchTasks(); }}
-          token={token}
+          getToken={getToken}
         />
       )}
     </div>
