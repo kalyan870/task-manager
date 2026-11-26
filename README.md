@@ -1,8 +1,14 @@
 # Task Manager
 
 TaskFlow is a React task dashboard with Clerk sign-in, an Express API, owner-scoped Neon PostgreSQL persistence, and private Socket.IO updates.
+**Live link:** [https://task-manager-five-virid-60.vercel.app](https://task-manager-five-virid-60.vercel.app)
 
 ## Architecture
+
+![task-manager architecture map](docs/images/task-manager-architecture.png)
+
+[Architecture notes](docs/architecture.md) · [Editable SVG](docs/images/task-manager-architecture.svg)
+
 
 ```mermaid
 flowchart LR
